@@ -1,0 +1,14 @@
+.venv/
+venv/
+__pycache__/
+*.pyc
+.env
+.env.*
+*.db
+test_sensor.json
+backend/ml/data/
+backend/ml/models/
+.pio/
+.gradle/
+build/
+local.properties
