@@ -1,0 +1,755 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Activity Recognition | Dashboard</title>
+
+    <style>
+        /* =========================
+           ACEY YELLOW COLOR THEME
+        ========================= */
+
+        :root {
+            --primary: #F6D365;
+            --gold: #E9B949;
+            --gold-dark: #956100;
+            --background: #FFF9E9;
+            --white: #FFFFFF;
+            --text: #423824;
+            --muted: #81765D;
+            --border: #F0E5C9;
+            --green: #21613C;
+            --red: #A03232;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            background: var(--background);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* =========================
+           HEADER
+        ========================= */
+
+        header {
+            background: var(--primary);
+            border-bottom: 3px solid var(--gold);
+            padding: 25px 6%;
+        }
+
+        .header-content {
+            max-width: 1100px;
+            margin: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .brand h1 {
+            font-size: 26px;
+            font-weight: 800;
+            margin-bottom: 5px;
+        }
+
+        .brand p {
+            color: #66582F;
+            font-size: 14px;
+        }
+
+        .header-tag {
+            background: rgba(255,255,255,0.65);
+            color: var(--text);
+            border: 1px solid rgba(100,80,20,0.12);
+            padding: 9px 15px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        /* =========================
+           MAIN LAYOUT
+        ========================= */
+
+        main {
+            width: 90%;
+            max-width: 1100px;
+            margin: 32px auto;
+        }
+
+        .section-title {
+            font-size: 21px;
+            font-weight: 700;
+            margin-bottom: 7px;
+        }
+
+        .section-subtitle {
+            font-size: 14px;
+            color: var(--muted);
+            margin-bottom: 25px;
+        }
+
+        .card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 5px 20px rgba(100,80,20,0.05);
+            margin-bottom: 22px;
+        }
+
+        .card h2 {
+            font-size: 17px;
+            margin-bottom: 15px;
+        }
+
+        .muted {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        /* =========================
+           SYSTEM STATUS
+        ========================= */
+
+        .status-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 30px;
+            padding: 9px 16px;
+            background: #F5EEDC;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .connected {
+            background: #E0F3E6;
+            color: var(--green);
+        }
+
+        .disconnected {
+            background: #FFE5E0;
+            color: var(--red);
+        }
+
+        /* =========================
+           ACTIVITY CARD
+        ========================= */
+
+        .activity-card {
+            text-align: center;
+            padding: 40px 25px;
+            background: linear-gradient(
+                145deg,
+                #FFFFFF 0%,
+                #FFF3C4 100%
+            );
+        }
+
+        .activity-icon {
+            width: 78px;
+            height: 78px;
+            background: var(--primary);
+            border-radius: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 36px;
+            margin: 20px auto;
+            box-shadow: 0 5px 15px rgba(233,185,73,0.25);
+        }
+
+        .activity-label {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .activity {
+            font-size: 44px;
+            font-weight: 800;
+            color: var(--gold-dark);
+            margin: 15px 0;
+        }
+
+        .confidence {
+            font-size: 27px;
+            font-weight: 700;
+            color: var(--gold-dark);
+            margin: 12px 0;
+        }
+
+        .confidence-bar {
+            max-width: 400px;
+            height: 12px;
+            background: #F1E4BF;
+            border-radius: 20px;
+            margin: 18px auto;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(
+                90deg,
+                #E9B949,
+                #F6D365
+            );
+            border-radius: 20px;
+            transition: width 0.5s ease;
+        }
+
+        /* =========================
+           INFORMATION CARDS
+        ========================= */
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 22px;
+        }
+
+        .info-card {
+            background: white;
+            padding: 22px;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+        }
+
+        .info-card .icon {
+            font-size: 26px;
+            margin-bottom: 12px;
+        }
+
+        .info-card h3 {
+            font-size: 14px;
+            color: var(--muted);
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .info-card .value {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        /* =========================
+           ACTIVITY HISTORY TABLE
+        ========================= */
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            background: #FFF1BD;
+            color: #5B4615;
+            padding: 15px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        tbody tr:hover {
+            background: #FFFBED;
+        }
+
+        .activity-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .walking {
+            background: #FFF0B5;
+            color: #805400;
+        }
+
+        .running {
+            background: #FFE0B8;
+            color: #985300;
+        }
+
+        /* =========================
+           FOOTER
+        ========================= */
+
+        footer {
+            text-align: center;
+            padding: 25px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        /* =========================
+           MOBILE RESPONSIVENESS
+        ========================= */
+
+        @media (max-width: 600px) {
+            header {
+                padding: 22px 5%;
+            }
+
+            .brand h1 {
+                font-size: 21px;
+            }
+
+            main {
+                width: 94%;
+                margin: 22px auto;
+            }
+
+            .card {
+                padding: 18px;
+            }
+
+            .activity {
+                font-size: 36px;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .activity-card {
+                padding: 28px 18px;
+            }
+
+            th, td {
+                padding: 11px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <header>
+        <div class="header-content">
+            <div class="brand">
+                <h1>☀️ Activity Recognition</h1>
+                <p>IoT-Based Human Activity Monitoring</p>
+            </div>
+
+            <div class="header-tag">
+                ✨ Smart Motion Tracking
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN DASHBOARD -->
+    <main>
+
+        <h2 class="section-title">
+            Dashboard Overview
+        </h2>
+
+        <p class="section-subtitle">
+            Monitor detected activities and
+            view classification history.
+        </p>
+
+        <!-- SYSTEM CONNECTION -->
+        <div class="card">
+            <div class="status-container">
+                <div>
+                    <h2>System Connection</h2>
+                    <p class="muted">
+                        Local Flask API connection status
+                    </p>
+                </div>
+
+                <span id="connection" class="status"
+                      role="status">
+                    Connecting...
+                </span>
+            </div>
+        </div>
+
+        <!-- CURRENT ACTIVITY -->
+        <div class="card activity-card">
+
+            <p class="activity-label">
+                CURRENT DETECTED ACTIVITY
+            </p>
+
+            <div id="activity-icon" class="activity-icon">
+                ⏳
+            </div>
+
+            <div id="activity" class="activity"
+                 aria-live="polite">
+                Waiting...
+            </div>
+
+            <p class="muted">
+                Prediction Confidence
+            </p>
+
+            <div id="confidence" class="confidence">
+                --%
+            </div>
+
+            <div class="confidence-bar">
+                <div id="confidence-fill"
+                     class="confidence-fill">
+                </div>
+            </div>
+
+            <p id="last-updated" class="muted">
+                Waiting for activity data
+            </p>
+
+        </div>
+
+        <!-- INFORMATION CARDS -->
+        <div class="info-grid">
+
+            <div class="info-card">
+                <div class="icon">📊</div>
+                <h3>Recent Activity Records</h3>
+                <div id="total-records" class="value">
+                    0
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="icon">🔄</div>
+                <h3>Dashboard Refresh</h3>
+                <div class="value">
+                    Every 3 seconds
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ACTIVITY HISTORY -->
+        <div class="card">
+
+            <h2>Activity History</h2>
+
+            <p class="muted" style="margin-bottom: 20px;">
+                Recent Walking and Running predictions
+                stored in the database.
+            </p>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Activity</th>
+                            <th>Confidence</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="history">
+                        <tr>
+                            <td colspan="4">
+                                Loading activity records...
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer>
+        ☀️ Activity Recognition System
+        | Powered by IoT and Machine Learning
+    </footer>
+
+    <!-- =========================
+         JAVASCRIPT / FLASK API
+    ========================= -->
+
+    <script>
+
+        const activityElement =
+            document.getElementById("activity");
+
+        const activityIcon =
+            document.getElementById("activity-icon");
+
+        const confidenceElement =
+            document.getElementById("confidence");
+
+        const confidenceFill =
+            document.getElementById("confidence-fill");
+
+        const connectionElement =
+            document.getElementById("connection");
+
+        const historyElement =
+            document.getElementById("history");
+
+        const updatedElement =
+            document.getElementById("last-updated");
+
+        const totalRecordsElement =
+            document.getElementById("total-records");
+
+
+        // Format SQLite UTC timestamps for the browser
+        function formatTime(timestamp) {
+
+            if (!timestamp) {
+                return "-";
+            }
+
+            const date = new Date(
+                timestamp.replace(" ", "T") + "Z"
+            );
+
+            if (Number.isNaN(date.getTime())) {
+                return timestamp;
+            }
+
+            return date.toLocaleString();
+        }
+
+
+        // Safely create table cells
+        function addCell(row, value) {
+
+            const cell = document.createElement("td");
+
+            cell.textContent = value;
+
+            row.appendChild(cell);
+
+            return cell;
+        }
+
+
+        // Display records in the history table
+        function displayHistory(records) {
+
+            historyElement.replaceChildren();
+
+            if (records.length === 0) {
+
+                const row = document.createElement("tr");
+                const cell = addCell(
+                    row,
+                    "No activity records yet."
+                );
+
+                cell.colSpan = 4;
+
+                historyElement.appendChild(row);
+                return;
+            }
+
+            records.slice(0, 10).forEach(record => {
+
+                const row = document.createElement("tr");
+
+                addCell(row, record.id);
+
+                const activityCell = document.createElement("td");
+
+                const badge = document.createElement("span");
+
+                const isWalking =
+                    record.activity === "Walking";
+
+                badge.className =
+                    "activity-badge " +
+                    (isWalking ? "walking" : "running");
+
+                badge.textContent = record.activity;
+
+                activityCell.appendChild(badge);
+
+                row.appendChild(activityCell);
+
+                const confidence =
+                    Number(record.confidence);
+
+                addCell(
+                    row,
+                    Number.isFinite(confidence)
+                        ? confidence.toFixed(2) + "%"
+                        : "--%"
+                );
+
+                addCell(
+                    row,
+                    formatTime(record.timestamp)
+                );
+
+                historyElement.appendChild(row);
+            });
+        }
+
+
+        // Load predictions from Flask API
+        async function loadActivityData() {
+
+            try {
+
+                const response = await fetch(
+                    "/api/activities",
+                    { cache: "no-store" }
+                );
+
+                if (!response.ok) {
+                    throw new Error("API request failed");
+                }
+
+                const records = await response.json();
+
+                // Connection status
+                connectionElement.textContent =
+                    "● API Connected";
+
+                connectionElement.className =
+                    "status connected";
+
+                // Number of records returned by the API
+                totalRecordsElement.textContent =
+                    records.length;
+
+                if (records.length > 0) {
+
+                    const latest = records[0];
+
+                    activityElement.textContent =
+                        latest.activity;
+
+                    // Update activity icon
+                    if (latest.activity === "Walking") {
+
+                        activityIcon.textContent = "🚶";
+
+                    } else if (
+                        latest.activity === "Running"
+                    ) {
+
+                        activityIcon.textContent = "🏃";
+
+                    } else {
+
+                        activityIcon.textContent = "📊";
+                    }
+
+                    // Update confidence
+                    const confidence =
+                        Number(latest.confidence);
+
+                    if (Number.isFinite(confidence)) {
+
+                        const safeConfidence =
+                            Math.max(
+                                0,
+                                Math.min(100, confidence)
+                            );
+
+                        confidenceElement.textContent =
+                            confidence.toFixed(2) + "%";
+
+                        confidenceFill.style.width =
+                            safeConfidence + "%";
+
+                    } else {
+
+                        confidenceElement.textContent =
+                            "--%";
+
+                        confidenceFill.style.width = "0%";
+                    }
+
+                    // Update timestamp
+                    updatedElement.textContent =
+                        "Recorded: " +
+                        formatTime(latest.timestamp);
+
+                } else {
+
+                    activityElement.textContent =
+                        "Waiting...";
+
+                    activityIcon.textContent = "⏳";
+
+                    confidenceElement.textContent =
+                        "--%";
+
+                    confidenceFill.style.width = "0%";
+
+                    updatedElement.textContent =
+                        "No predictions received yet";
+                }
+
+                displayHistory(records);
+
+            } catch (error) {
+
+                console.error(
+                    "Failed to retrieve activity data:",
+                    error
+                );
+
+                connectionElement.textContent =
+                    "● API Disconnected";
+
+                connectionElement.className =
+                    "status disconnected";
+            }
+        }
+
+
+        // Load immediately
+        loadActivityData();
+
+        // Refresh every 3 seconds
+        setInterval(loadActivityData, 3000);
+
+    </script>
+
+</body>
+</html>
