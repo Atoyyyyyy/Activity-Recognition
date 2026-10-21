@@ -1,0 +1,25 @@
+-- Run in the Supabase SQL Editor for the project used by Vercel.
+-- This table stores only predictions produced locally by the classifier.
+
+create table if not exists public.activity_predictions (
+    id bigint primary key check (id > 0),
+    activity text not null check (activity in ('Idle', 'Walking', 'Running')),
+    confidence double precision,
+    source text not null check (source in ('motion_heuristic', 'random_forest')),
+    timestamp timestamptz not null,
+    sensor_timestamp timestamptz not null,
+    inserted_at timestamptz not null default now(),
+    constraint activity_predictions_confidence_check check (
+        (source = 'motion_heuristic' and activity = 'Idle' and confidence is null)
+        or
+        (source = 'random_forest' and activity in ('Walking', 'Running')
+            and confidence is not null and confidence between 0 and 100)
+    )
+);
+
+create index if not exists activity_predictions_timestamp_desc_idx
+    on public.activity_predictions (timestamp desc);
+
+alter table public.activity_predictions enable row level security;
+revoke all on table public.activity_predictions from public, anon, authenticated;
+grant select, insert on table public.activity_predictions to service_role;

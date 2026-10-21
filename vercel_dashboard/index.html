@@ -8,8 +8,6 @@
     <meta name="theme-color" content="#F6D365">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
-    <!-- Set an external API base URL here when one is available; HTTPS only. -->
-    <meta name="activity-api-base-url" content="">
     <link rel="manifest" href="./manifest.json">
     <link rel="apple-touch-icon" href="./icons/icon-192.png">
 
@@ -532,22 +530,8 @@
     ========================= -->
 
     <script>
-        // Blank until a real external HTTPS API is available.
-        const API_BASE_URL = (() => {
-            const configured = document.querySelector(
-                'meta[name="activity-api-base-url"]'
-            )?.content.trim();
-            if (!configured) return "";
-            try {
-                const url = new URL(configured);
-                if (url.protocol !== "https:" || url.username || url.password) {
-                    return "";
-                }
-                return url.href.replace(/\/+$/, "");
-            } catch {
-                return "";
-            }
-        })();
+        // Vercel serves this page and its API on the same HTTPS origin.
+        const API_BASE_URL = window.location.origin;
 
         const activityElement = document.getElementById("activity");
         const activityIcon = document.getElementById("activity-icon");
@@ -561,7 +545,10 @@
 
         function formatTime(timestamp) {
             if (!timestamp) return "?";
-            const date = new Date(timestamp.replace(" ", "T") + "Z");
+            const normalized = timestamp.includes("T")
+                ? timestamp
+                : timestamp.replace(" ", "T") + "Z";
+            const date = new Date(normalized);
             return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString();
         }
 
@@ -686,7 +673,7 @@
         async function loadActivityData() {
             if (!API_BASE_URL) {
                 showApiUnavailable(
-                    "Configure an external HTTPS API to view real sensor readings."
+                    "The Vercel API is unavailable; no current sensor readings can be shown."
                 );
                 return;
             }
@@ -708,7 +695,7 @@
                 renderActivity(records, systemStatus);
             } catch {
                 showApiUnavailable(
-                    "The external API could not be reached; no current readings are available."
+                    "The Vercel API could not be reached; no current readings are available."
                 );
             }
         }
