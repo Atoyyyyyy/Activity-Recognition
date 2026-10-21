@@ -1,0 +1,727 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#F6D365">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <!-- Set an external API base URL here when one is available; HTTPS only. -->
+    <meta name="activity-api-base-url" content="">
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="./icons/icon-192.png">
+
+    <title>Activity Recognition | Dashboard</title>
+
+    <style>
+        /* =========================
+           ACEY YELLOW COLOR THEME
+        ========================= */
+
+        :root {
+            --primary: #F6D365;
+            --gold: #E9B949;
+            --gold-dark: #956100;
+            --background: #FFF9E9;
+            --white: #FFFFFF;
+            --text: #423824;
+            --muted: #81765D;
+            --border: #F0E5C9;
+            --green: #21613C;
+            --red: #A03232;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            background: var(--background);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        /* =========================
+           HEADER
+        ========================= */
+
+        header {
+            background: var(--primary);
+            border-bottom: 3px solid var(--gold);
+            padding: 25px 6%;
+        }
+
+        .header-content {
+            max-width: 1100px;
+            margin: auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+
+        .brand h1 {
+            font-size: 26px;
+            font-weight: 800;
+            margin-bottom: 5px;
+        }
+
+        .brand p {
+            color: #66582F;
+            font-size: 14px;
+        }
+
+        .header-tag {
+            background: rgba(255,255,255,0.65);
+            color: var(--text);
+            border: 1px solid rgba(100,80,20,0.12);
+            padding: 9px 15px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        /* =========================
+           MAIN LAYOUT
+        ========================= */
+
+        main {
+            width: 90%;
+            max-width: 1100px;
+            margin: 32px auto;
+        }
+
+        .section-title {
+            font-size: 21px;
+            font-weight: 700;
+            margin-bottom: 7px;
+        }
+
+        .section-subtitle {
+            font-size: 14px;
+            color: var(--muted);
+            margin-bottom: 25px;
+        }
+
+        .card {
+            background: var(--white);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 5px 20px rgba(100,80,20,0.05);
+            margin-bottom: 22px;
+        }
+
+        .card h2 {
+            font-size: 17px;
+            margin-bottom: 15px;
+        }
+
+        .muted {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        /* =========================
+           SYSTEM STATUS
+        ========================= */
+
+        .status-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .status {
+            display: inline-flex;
+            align-items: center;
+            border-radius: 30px;
+            padding: 9px 16px;
+            background: #F5EEDC;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .connected {
+            background: #E0F3E6;
+            color: var(--green);
+        }
+
+        .disconnected {
+            background: #FFE5E0;
+            color: var(--red);
+        }
+
+        .stale {
+            background: #FFF0C2;
+            color: #805400;
+        }
+
+        /* =========================
+           ACTIVITY CARD
+        ========================= */
+
+        .activity-card {
+            text-align: center;
+            padding: 40px 25px;
+            background: linear-gradient(
+                145deg,
+                #FFFFFF 0%,
+                #FFF3C4 100%
+            );
+        }
+
+        .activity-icon {
+            width: 78px;
+            height: 78px;
+            background: var(--primary);
+            border-radius: 24px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 36px;
+            margin: 20px auto;
+            box-shadow: 0 5px 15px rgba(233,185,73,0.25);
+        }
+
+        .activity-label {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .activity {
+            font-size: 44px;
+            font-weight: 800;
+            color: var(--gold-dark);
+            margin: 15px 0;
+        }
+
+        .confidence {
+            font-size: 27px;
+            font-weight: 700;
+            color: var(--gold-dark);
+            margin: 12px 0;
+        }
+
+        .confidence-bar {
+            max-width: 400px;
+            height: 12px;
+            background: #F1E4BF;
+            border-radius: 20px;
+            margin: 18px auto;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(
+                90deg,
+                #E9B949,
+                #F6D365
+            );
+            border-radius: 20px;
+            transition: width 0.5s ease;
+        }
+
+        /* =========================
+           INFORMATION CARDS
+        ========================= */
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 22px;
+        }
+
+        .info-card {
+            background: white;
+            padding: 22px;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+        }
+
+        .info-card .icon {
+            font-size: 26px;
+            margin-bottom: 12px;
+        }
+
+        .info-card h3 {
+            font-size: 14px;
+            color: var(--muted);
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .info-card .value {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        /* =========================
+           ACTIVITY HISTORY TABLE
+        ========================= */
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+        }
+
+        th {
+            background: #FFF1BD;
+            color: #5B4615;
+            padding: 15px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        td {
+            padding: 15px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+        }
+
+        tbody tr:hover {
+            background: #FFFBED;
+        }
+
+        .activity-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+
+        .walking {
+            background: #FFF0B5;
+            color: #805400;
+        }
+
+        .running {
+            background: #FFE0B8;
+            color: #985300;
+        }
+
+        .idle {
+            background: #E8F1E8;
+            color: #315B3A;
+        }
+
+        /* =========================
+           FOOTER
+        ========================= */
+
+        footer {
+            text-align: center;
+            padding: 25px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        /* =========================
+           MOBILE RESPONSIVENESS
+        ========================= */
+
+        @media (max-width: 600px) {
+            header {
+                padding: 22px 5%;
+            }
+
+            .brand h1 {
+                font-size: 21px;
+            }
+
+            main {
+                width: 94%;
+                margin: 22px auto;
+            }
+
+            .card {
+                padding: 18px;
+            }
+
+            .activity {
+                font-size: 36px;
+            }
+
+            .info-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .activity-card {
+                padding: 28px 18px;
+            }
+
+            th, td {
+                padding: 11px;
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- HEADER -->
+    <header>
+        <div class="header-content">
+            <div class="brand">
+                <h1>☀️ Activity Recognition</h1>
+                <p>IoT-Based Human Activity Monitoring</p>
+            </div>
+
+            <div class="header-tag">
+                ✨ Smart Motion Tracking
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN DASHBOARD -->
+    <main>
+
+        <h2 class="section-title">
+            Dashboard Overview
+        </h2>
+
+        <p class="section-subtitle">
+            Monitor detected activities and
+            view classification history.
+        </p>
+
+        <!-- SYSTEM CONNECTION -->
+        <div class="card">
+            <div class="status-container">
+                <div>
+                    <h2>System Connection</h2>
+                    <p class="muted">
+                        API availability and RT-Spark sensor freshness
+                    </p>
+                    <p id="stream-detail" class="muted" style="margin-top: 6px;">
+                        Waiting for connection to an external API
+                    </p>
+                </div>
+
+                <span id="connection" class="status"
+                      role="status">
+                    API unavailable
+                </span>
+            </div>
+        </div>
+
+        <!-- CURRENT ACTIVITY -->
+        <div class="card activity-card">
+
+            <p class="activity-label">
+                CURRENT DETECTED ACTIVITY
+            </p>
+
+            <div id="activity-icon" class="activity-icon">
+                ⏳
+            </div>
+
+            <div id="activity" class="activity"
+                 aria-live="polite">
+                Waiting...
+            </div>
+
+            <p class="muted">
+                Prediction Method / Confidence
+            </p>
+
+            <div id="confidence" class="confidence">
+                --%
+            </div>
+
+            <div class="confidence-bar">
+                <div id="confidence-fill"
+                     class="confidence-fill">
+                </div>
+            </div>
+
+            <p id="last-updated" class="muted">
+                Waiting for API connection
+            </p>
+            <p id="prediction-method" class="muted" style="margin-top: 8px;">
+                No prediction yet
+            </p>
+
+        </div>
+
+        <!-- INFORMATION CARDS -->
+        <div class="info-grid">
+
+            <div class="info-card">
+                <div class="icon">📊</div>
+                <h3>Recent Activity Records</h3>
+                <div id="total-records" class="value">
+                    ?
+                </div>
+            </div>
+
+            <div class="info-card">
+                <div class="icon">🔄</div>
+                <h3>Dashboard Refresh</h3>
+                <div class="value">
+                    Every 3 seconds
+                </div>
+            </div>
+
+        </div>
+
+        <!-- ACTIVITY HISTORY -->
+        <div class="card">
+
+            <h2>Activity History</h2>
+
+            <p class="muted" style="margin-bottom: 20px;">
+                Recent Idle, Walking, and Running predictions
+                stored in the database.
+            </p>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Activity</th>
+                            <th>Method</th>
+                            <th>Confidence</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+
+                    <tbody id="history">
+                        <tr>
+                            <td colspan="5">
+                                Waiting for API connection
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- FOOTER -->
+    <footer>
+        ☀️ Activity Recognition System
+        | Powered by IoT and Machine Learning
+    </footer>
+
+    <!-- =========================
+         JAVASCRIPT / FLASK API
+    ========================= -->
+
+    <script>
+        // Blank until a real external HTTPS API is available.
+        const API_BASE_URL = (() => {
+            const configured = document.querySelector(
+                'meta[name="activity-api-base-url"]'
+            )?.content.trim();
+            if (!configured) return "";
+            try {
+                const url = new URL(configured);
+                if (url.protocol !== "https:" || url.username || url.password) {
+                    return "";
+                }
+                return url.href.replace(/\/+$/, "");
+            } catch {
+                return "";
+            }
+        })();
+
+        const activityElement = document.getElementById("activity");
+        const activityIcon = document.getElementById("activity-icon");
+        const confidenceElement = document.getElementById("confidence");
+        const confidenceFill = document.getElementById("confidence-fill");
+        const connectionElement = document.getElementById("connection");
+        const historyElement = document.getElementById("history");
+        const updatedElement = document.getElementById("last-updated");
+        const totalRecordsElement = document.getElementById("total-records");
+        const methodElement = document.getElementById("prediction-method");
+
+        function formatTime(timestamp) {
+            if (!timestamp) return "?";
+            const date = new Date(timestamp.replace(" ", "T") + "Z");
+            return Number.isNaN(date.getTime()) ? timestamp : date.toLocaleString();
+        }
+
+        function addCell(row, value) {
+            const cell = document.createElement("td");
+            cell.textContent = value;
+            row.appendChild(cell);
+            return cell;
+        }
+
+        function displayHistory(records) {
+            historyElement.replaceChildren();
+            if (!records.length) {
+                const row = document.createElement("tr");
+                const cell = addCell(row, "No activity records available.");
+                cell.colSpan = 5;
+                historyElement.appendChild(row);
+                return;
+            }
+
+            records.slice(0, 10).forEach(record => {
+                const row = document.createElement("tr");
+                addCell(row, record.id);
+                const activityCell = document.createElement("td");
+                const badge = document.createElement("span");
+                const activityClass = {
+                    Idle: "idle",
+                    Walking: "walking",
+                    Running: "running"
+                }[record.activity] || "";
+                badge.className = "activity-badge " + activityClass;
+                badge.textContent = record.activity;
+                activityCell.appendChild(badge);
+                row.appendChild(activityCell);
+                addCell(row, record.source === "motion_heuristic"
+                    ? "Motion heuristic"
+                    : "Experimental Random Forest");
+                const confidence = Number(record.confidence);
+                addCell(row, Number.isFinite(confidence)
+                    ? confidence.toFixed(2) + "%"
+                    : "?");
+                addCell(row, formatTime(record.timestamp));
+                historyElement.appendChild(row);
+            });
+        }
+
+        function showApiUnavailable(message) {
+            connectionElement.textContent = "API unavailable";
+            connectionElement.className = "status disconnected";
+            document.getElementById("stream-detail").textContent = message;
+            activityElement.textContent = "Waiting for connection";
+            activityIcon.textContent = "?";
+            confidenceElement.textContent = "?";
+            confidenceFill.style.width = "0%";
+            updatedElement.textContent = "Waiting for API connection";
+            methodElement.textContent = "No current prediction";
+            totalRecordsElement.textContent = "?";
+            displayHistory([]);
+        }
+
+        function renderActivity(records, systemStatus) {
+            const states = {
+                live: ["? RT-Spark Live", "status connected"],
+                stale: ["? Sensor Data Stale", "status stale"],
+                waiting: ["? Waiting for RT-Spark", "status stale"]
+            };
+            const [label, className] = states[systemStatus.stream_state]
+                || ["? Sensor Disconnected", "status disconnected"];
+            connectionElement.textContent = label;
+            connectionElement.className = className;
+            const age = systemStatus.sensor_age_seconds;
+            document.getElementById("stream-detail").textContent =
+                systemStatus.stream_state === "live"
+                    ? `Latest sensor reading ${Number(age).toFixed(1)} seconds ago`
+                    : systemStatus.stream_state === "stale"
+                        ? "No recent sensor readings; check the board, broker, and subscriber"
+                        : "No RT-Spark sensor readings have reached this API yet";
+            totalRecordsElement.textContent = String(records.length);
+
+            if (systemStatus.stream_state !== "live") {
+                activityElement.textContent = systemStatus.stream_state === "stale"
+                    ? "Stale" : "Waiting for connection";
+                activityIcon.textContent = "?";
+                confidenceElement.textContent = "?";
+                confidenceFill.style.width = "0%";
+                updatedElement.textContent = systemStatus.stream_state === "stale"
+                    ? "No recent sensor readings" : "Waiting for sensor readings";
+                methodElement.textContent = "No current prediction";
+            } else if (records.length) {
+                const latest = records[0];
+                activityElement.textContent = latest.activity;
+                activityIcon.textContent = {
+                    Idle: "??", Walking: "??", Running: "??"
+                }[latest.activity] || "??";
+                methodElement.textContent = latest.source === "motion_heuristic"
+                    ? "Experimental motion heuristic"
+                    : "Experimental Random Forest model";
+                const confidence = Number(latest.confidence);
+                if (latest.source === "motion_heuristic") {
+                    confidenceElement.textContent = "Heuristic";
+                    confidenceFill.style.width = "0%";
+                } else if (Number.isFinite(confidence)) {
+                    const safeConfidence = Math.max(0, Math.min(100, confidence));
+                    confidenceElement.textContent = confidence.toFixed(2) + "%";
+                    confidenceFill.style.width = safeConfidence + "%";
+                } else {
+                    confidenceElement.textContent = "?";
+                    confidenceFill.style.width = "0%";
+                }
+                updatedElement.textContent = "Recorded: " + formatTime(latest.timestamp);
+            } else {
+                activityElement.textContent = "Waiting for connection";
+                activityIcon.textContent = "?";
+                confidenceElement.textContent = "?";
+                confidenceFill.style.width = "0%";
+                updatedElement.textContent = "No predictions received yet";
+                methodElement.textContent = "No prediction yet";
+            }
+            displayHistory(records);
+        }
+
+        async function loadActivityData() {
+            if (!API_BASE_URL) {
+                showApiUnavailable(
+                    "Configure an external HTTPS API to view real sensor readings."
+                );
+                return;
+            }
+            try {
+                const [response, statusResponse] = await Promise.all([
+                    fetch(`${API_BASE_URL}/api/activities`, {
+                        cache: "no-store", credentials: "omit"
+                    }),
+                    fetch(`${API_BASE_URL}/api/status`, {
+                        cache: "no-store", credentials: "omit"
+                    })
+                ]);
+                if (!response.ok || !statusResponse.ok) {
+                    throw new Error("API request failed");
+                }
+                const [records, systemStatus] = await Promise.all([
+                    response.json(), statusResponse.json()
+                ]);
+                renderActivity(records, systemStatus);
+            } catch {
+                showApiUnavailable(
+                    "The external API could not be reached; no current readings are available."
+                );
+            }
+        }
+
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("./service-worker.js").catch(() => {
+                // The dashboard still works when service workers are unavailable.
+            });
+        }
+
+        loadActivityData();
+        if (API_BASE_URL) setInterval(loadActivityData, 3000);
+    </script>
+
+</body>
+</html>
