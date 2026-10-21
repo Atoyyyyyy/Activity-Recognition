@@ -1,0 +1,8 @@
+from building import *
+
+cwd = GetCurrentDir()
+group = DefineGroup('OnboardLCD', ['lcd/drv_lcd.c'],
+                    depend=['BSP_USING_ONBOARD_LCD'],
+                    CPPPATH=[cwd + '/lcd'])
+
+Return('group')

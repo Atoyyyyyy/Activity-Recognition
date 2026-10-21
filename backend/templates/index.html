@@ -5,6 +5,11 @@
     <meta charset="UTF-8">
     <meta name="viewport"
           content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#F6D365">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
 
     <title>Activity Recognition | Dashboard</title>
 
@@ -151,6 +156,11 @@
         .disconnected {
             background: #FFE5E0;
             color: var(--red);
+        }
+
+        .stale {
+            background: #FFF0C2;
+            color: #805400;
         }
 
         /* =========================
@@ -306,6 +316,11 @@
             color: #985300;
         }
 
+        .idle {
+            background: #E8F1E8;
+            color: #315B3A;
+        }
+
         /* =========================
            FOOTER
         ========================= */
@@ -394,7 +409,10 @@
                 <div>
                     <h2>System Connection</h2>
                     <p class="muted">
-                        Local Flask API connection status
+                        API availability and RT-Spark sensor freshness
+                    </p>
+                    <p id="stream-detail" class="muted" style="margin-top: 6px;">
+                        Waiting for sensor stream status
                     </p>
                 </div>
 
@@ -422,7 +440,7 @@
             </div>
 
             <p class="muted">
-                Prediction Confidence
+                Prediction Method / Confidence
             </p>
 
             <div id="confidence" class="confidence">
@@ -437,6 +455,9 @@
 
             <p id="last-updated" class="muted">
                 Waiting for activity data
+            </p>
+            <p id="prediction-method" class="muted" style="margin-top: 8px;">
+                No prediction yet
             </p>
 
         </div>
@@ -468,7 +489,7 @@
             <h2>Activity History</h2>
 
             <p class="muted" style="margin-bottom: 20px;">
-                Recent Walking and Running predictions
+                Recent Idle, Walking, and Running predictions
                 stored in the database.
             </p>
 
@@ -478,6 +499,7 @@
                         <tr>
                             <th>ID</th>
                             <th>Activity</th>
+                            <th>Method</th>
                             <th>Confidence</th>
                             <th>Timestamp</th>
                         </tr>
@@ -485,7 +507,7 @@
 
                     <tbody id="history">
                         <tr>
-                            <td colspan="4">
+                            <td colspan="5">
                                 Loading activity records...
                             </td>
                         </tr>
@@ -533,6 +555,9 @@
         const totalRecordsElement =
             document.getElementById("total-records");
 
+        const methodElement =
+            document.getElementById("prediction-method");
+
 
         // Format SQLite UTC timestamps for the browser
         function formatTime(timestamp) {
@@ -579,7 +604,7 @@
                     "No activity records yet."
                 );
 
-                cell.colSpan = 4;
+                cell.colSpan = 5;
 
                 historyElement.appendChild(row);
                 return;
@@ -595,18 +620,25 @@
 
                 const badge = document.createElement("span");
 
-                const isWalking =
-                    record.activity === "Walking";
-
-                badge.className =
-                    "activity-badge " +
-                    (isWalking ? "walking" : "running");
+                const activityClass = {
+                    Idle: "idle",
+                    Walking: "walking",
+                    Running: "running"
+                }[record.activity] || "";
+                badge.className = "activity-badge " + activityClass;
 
                 badge.textContent = record.activity;
 
                 activityCell.appendChild(badge);
 
                 row.appendChild(activityCell);
+
+                addCell(
+                    row,
+                    record.source === "motion_heuristic"
+                        ? "Motion heuristic"
+                        : "Random Forest"
+                );
 
                 const confidence =
                     Number(record.confidence);
@@ -633,56 +665,76 @@
 
             try {
 
-                const response = await fetch(
-                    "/api/activities",
-                    { cache: "no-store" }
-                );
+                const [response, statusResponse] = await Promise.all([
+                    fetch("/api/activities", { cache: "no-store" }),
+                    fetch("/api/status", { cache: "no-store" })
+                ]);
 
-                if (!response.ok) {
+                if (!response.ok || !statusResponse.ok) {
                     throw new Error("API request failed");
                 }
 
                 const records = await response.json();
+                const systemStatus = await statusResponse.json();
 
-                // Connection status
-                connectionElement.textContent =
-                    "● API Connected";
-
-                connectionElement.className =
-                    "status connected";
+                const states = {
+                    live: ["● RT-Spark Live", "status connected"],
+                    stale: ["● Sensor Data Stale", "status stale"],
+                    waiting: ["● Waiting for RT-Spark", "status stale"]
+                };
+                const [label, className] =
+                    states[systemStatus.stream_state] ||
+                    ["● Sensor Disconnected", "status disconnected"];
+                connectionElement.textContent = label;
+                connectionElement.className = className;
+                const age = systemStatus.sensor_age_seconds;
+                document.getElementById("stream-detail").textContent =
+                    systemStatus.stream_state === "live"
+                        ? `Latest sensor reading ${Number(age).toFixed(1)} seconds ago`
+                        : systemStatus.stream_state === "stale"
+                            ? "No recent sensor readings; check the board, broker, and subscriber"
+                            : "No RT-Spark sensor readings have reached this database yet";
 
                 // Number of records returned by the API
                 totalRecordsElement.textContent =
                     records.length;
 
-                if (records.length > 0) {
+                // Never present stored predictions as current when sensor data is missing/stale.
+                if (systemStatus.stream_state !== "live") {
+
+                    activityElement.textContent =
+                        systemStatus.stream_state === "stale" ? "Stale" : "Waiting...";
+                    activityIcon.textContent = "⏳";
+                    confidenceElement.textContent = "--";
+                    confidenceFill.style.width = "0%";
+                    updatedElement.textContent =
+                        systemStatus.stream_state === "stale"
+                            ? "No recent sensor readings"
+                            : "Waiting for sensor readings";
+                    methodElement.textContent = "No current prediction";
+
+                } else if (records.length > 0) {
 
                     const latest = records[0];
 
                     activityElement.textContent =
                         latest.activity;
 
-                    // Update activity icon
-                    if (latest.activity === "Walking") {
-
-                        activityIcon.textContent = "🚶";
-
-                    } else if (
-                        latest.activity === "Running"
-                    ) {
-
-                        activityIcon.textContent = "🏃";
-
-                    } else {
-
-                        activityIcon.textContent = "📊";
-                    }
+                    const icons = { Idle: "⏸️", Walking: "👣", Running: "🏃" };
+                    activityIcon.textContent = icons[latest.activity] || "📊";
+                    methodElement.textContent =
+                        latest.source === "motion_heuristic"
+                            ? "Experimental motion heuristic"
+                            : "Random Forest model";
 
                     // Update confidence
                     const confidence =
                         Number(latest.confidence);
 
-                    if (Number.isFinite(confidence)) {
+                    if (latest.source === "motion_heuristic") {
+                        confidenceElement.textContent = "Heuristic";
+                        confidenceFill.style.width = "0%";
+                    } else if (Number.isFinite(confidence)) {
 
                         const safeConfidence =
                             Math.max(
@@ -723,6 +775,7 @@
 
                     updatedElement.textContent =
                         "No predictions received yet";
+                    methodElement.textContent = "No prediction yet";
                 }
 
                 displayHistory(records);
@@ -739,7 +792,20 @@
 
                 connectionElement.className =
                     "status disconnected";
+                document.getElementById("stream-detail").textContent =
+                    "Flask API is unavailable; the displayed data may be old";
+                activityElement.textContent = "Stale";
+                activityIcon.textContent = "⏳";
+                confidenceElement.textContent = "--";
+                confidenceFill.style.width = "0%";
+                methodElement.textContent = "No current prediction";
             }
+        }
+
+        if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.register("/service-worker.js").catch(error => {
+                console.warn("PWA service worker could not be registered:", error);
+            });
         }
 
 

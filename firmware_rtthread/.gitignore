@@ -1,0 +1,7 @@
+projects/05_iot_wifi_manager/applications/wifi_local.h
+projects/05_iot_wifi_manager/applications/mqtt_local.h
+projects/05_iot_wifi_manager/rt-thread.elf
+projects/05_iot_wifi_manager/rtthread.bin
+projects/05_iot_wifi_manager/rt-thread.map
+projects/05_iot_wifi_manager/.sconsign.dblite
+projects/05_iot_wifi_manager/**/__pycache__/

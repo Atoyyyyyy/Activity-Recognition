@@ -5,6 +5,10 @@ __pycache__/
 .env
 .env.*
 *.db
+*.sqlite
+*.sqlite3
+*.sqlite-*
+*.joblib
 test_sensor.json
 backend/ml/data/
 backend/ml/models/
@@ -12,3 +16,18 @@ backend/ml/models/
 .gradle/
 build/
 local.properties
+**/.vscode/
+firmware_rtthread/**/build/
+*.o
+*.a
+*.elf
+*.map
+*.bin
+*.hex
+firmware/fallback_sensor_backup/
+
+# Local RT-Spark network credentials and private header backups
+**/wifi_local.h
+**/mqtt_local.h
+**/*.step*.bak
+firmware_rtthread/**/.settings/

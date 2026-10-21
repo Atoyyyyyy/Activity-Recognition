@@ -1,6 +1,8 @@
 
 import json
+import os
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from collections import deque
 from getpass import getpass
@@ -8,6 +10,7 @@ from getpass import getpass
 import joblib
 import numpy as np
 import paho.mqtt.client as mqtt
+from idle_detector import IdleThresholds, idle_detection_enabled, is_idle_candidate
 
 
 # ==========================================
@@ -16,7 +19,7 @@ import paho.mqtt.client as mqtt
 
 BASE_DIR = Path(__file__).resolve().parent
 
-DB_PATH = BASE_DIR / "activities.db"
+DB_PATH = Path(os.environ.get("ACTIVITY_DB_PATH", BASE_DIR / "activities.db")).resolve()
 
 MODEL_PATH = (
     BASE_DIR / "ml" / "models" / "activity_model.joblib"
@@ -82,7 +85,7 @@ sensor_buffer = deque(maxlen=window_size)
 
 def init_db():
 
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn:
 
         # Raw sensor readings
         conn.execute("""
@@ -104,9 +107,18 @@ def init_db():
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 activity TEXT NOT NULL,
                 confidence REAL,
+                source TEXT NOT NULL DEFAULT 'random_forest',
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Additive migration: old records remain readable and are model predictions.
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(activities)")}
+        if "source" not in columns:
+            conn.execute(
+                "ALTER TABLE activities ADD COLUMN source TEXT NOT NULL DEFAULT 'random_forest'"
+            )
+        conn.commit()
 
     print("SQLite database initialized!")
 
@@ -142,57 +154,61 @@ def extract_features(values):
 # ACTIVITY CLASSIFICATION
 # ==========================================
 
-def classify_activity():
+def classify_activity(window=None):
 
     print("\nProcessing sensor readings...")
 
-    values = np.array(
-        sensor_buffer,
-        dtype=float
-    )
+    values = np.array(sensor_buffer if window is None else window, dtype=float)
 
-    # Generate features
-    features = extract_features(values)
+    # Experimental, disabled by default until labeled movement trials validate it.
+    if idle_detection_enabled() and is_idle_candidate(values, IdleThresholds.from_environment()):
+        activity = "Idle"
+        confidence = None
+        source = "motion_heuristic"
+    else:
+        source = "random_forest"
 
-    # Predict activity
-    prediction = int(
-        model.predict(features)[0]
-    )
+        # Generate features using the unchanged Random Forest preprocessing.
+        features = extract_features(values)
 
-    # Obtain prediction probabilities
-    probabilities = model.predict_proba(features)[0]
+        # Predict Walking or Running with the existing model.
+        prediction = int(model.predict(features)[0])
 
-    index = list(model.classes_).index(prediction)
+        # Obtain the existing model's prediction probability.
+        probabilities = model.predict_proba(features)[0]
 
-    confidence = float(
-        probabilities[index]
-    ) * 100
+        index = list(model.classes_).index(prediction)
 
-    activity = LABELS.get(
-        prediction,
-        "Unknown"
-    )
+        confidence = float(probabilities[index]) * 100
+
+        activity = LABELS.get(prediction, "Unknown")
 
     # Save prediction
-    with sqlite3.connect(DB_PATH) as conn:
+    with closing(sqlite3.connect(DB_PATH)) as conn:
 
         conn.execute("""
             INSERT INTO activities (
                 activity,
-                confidence
+                confidence,
+                source
             )
-            VALUES (?, ?)
+            VALUES (?, ?, ?)
         """, (
             activity,
-            confidence
+            confidence,
+            source
         ))
+        conn.commit()
 
     print("\n========================================")
     print("       ACTIVITY RECOGNITION RESULT")
     print("========================================")
 
     print("Predicted Activity:", activity)
-    print(f"Confidence: {confidence:.2f}%")
+    if source == "motion_heuristic":
+        print("Method: experimental motion heuristic (no Random Forest confidence)")
+    else:
+        print(f"Confidence: {confidence:.2f}%")
     print("Prediction saved to SQLite!")
 
     print("========================================\n")
@@ -275,7 +291,7 @@ def on_message(client, userdata, msg):
             )
 
         # Save raw sensor readings
-        with sqlite3.connect(DB_PATH) as conn:
+        with closing(sqlite3.connect(DB_PATH)) as conn:
 
             conn.execute("""
                 INSERT INTO sensor_readings (
@@ -295,6 +311,7 @@ def on_message(client, userdata, msg):
                 float(data["gyro_y"]),
                 float(data["gyro_z"])
             ))
+            conn.commit()
 
         # Add reading to sensor buffer
         sensor_buffer.append(reading)
@@ -373,6 +390,7 @@ if __name__ == "__main__":
     print("Broker:", BROKER)
     print("Port:", PORT)
     print("Topic:", TOPIC)
+    print("Application database:", DB_PATH)
 
     try:
 
