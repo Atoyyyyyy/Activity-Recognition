@@ -66,4 +66,6 @@ def is_idle_candidate(window: np.ndarray, thresholds: IdleThresholds | None = No
 
 
 def idle_detection_enabled() -> bool:
-    return os.getenv("ACTIVITY_IDLE_ENABLED", "0").strip().casefold() in {"1", "true", "yes", "on"}
+    # Step 87/89 stationary sensor checks support using the experimental gate
+    # for the live laboratory demo. Set ACTIVITY_IDLE_ENABLED=0 to disable it.
+    return os.getenv("ACTIVITY_IDLE_ENABLED", "1").strip().casefold() in {"1", "true", "yes", "on"}
