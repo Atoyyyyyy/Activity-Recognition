@@ -37,6 +37,17 @@ function mockRows(rows) {
     });
 }
 
+async function captureConfigLogs(run) {
+    const originalError = console.error;
+    const messages = [];
+    console.error = (...args) => messages.push(args.join(" "));
+    try {
+        return { result: await run(), messages };
+    } finally {
+        console.error = originalError;
+    }
+}
+
 test("status returns waiting when Supabase has no predictions", async () => {
     configureTestEnvironment();
     mockRows([]);
@@ -218,9 +229,29 @@ test("ingest rejects heuristic probabilities and unknown labels", async () => {
 test("missing database configuration is reported without exposing secrets", async () => {
     delete process.env.SUPABASE_URL;
     delete process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const response = await invoke(activitiesHandler, "GET");
+    const { result: response, messages } = await captureConfigLogs(
+        () => invoke(activitiesHandler, "GET")
+    );
     assert.equal(response.statusCode, 503);
     assert.deepEqual(response.body, { error: "database_not_configured" });
+    assert.match(messages.join(" "), /SUPABASE_URL/);
+    assert.match(messages.join(" "), /SUPABASE_SERVICE_ROLE_KEY/);
+    assert.equal(messages.join(" ").includes("test-project"), false);
+});
+
+test("invalid URL formatting is logged by category without exposing its contents", async () => {
+    process.env.SUPABASE_URL = "not-a-url-private-value";
+    process.env.SUPABASE_SERVICE_ROLE_KEY = "sb_secret_never-log-this";
+    const { result: response, messages } = await captureConfigLogs(
+        () => invoke(statusHandler, "GET")
+    );
+    const logs = messages.join(" ");
+    assert.equal(response.statusCode, 503);
+    assert.deepEqual(response.body, { error: "database_not_configured" });
+    assert.match(logs, /invalid SUPABASE_URL formatting: URL could not be parsed/);
+    assert.equal(logs.includes("not-a-url-private-value"), false);
+    assert.equal(logs.includes("sb_secret_never-log-this"), false);
+    assert.equal(JSON.stringify(response.body).includes("private-value"), false);
 });
 
 test("unsupported methods return 405", async () => {

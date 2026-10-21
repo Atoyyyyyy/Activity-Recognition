@@ -5,7 +5,14 @@ class SupabaseConfigurationError extends Error {}
 function getSupabaseConfig() {
     const rawUrl = process.env.SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!rawUrl || !serviceKey) {
+    const missingVariables = [];
+    if (!rawUrl) missingVariables.push("SUPABASE_URL");
+    if (!serviceKey) missingVariables.push("SUPABASE_SERVICE_ROLE_KEY");
+    if (missingVariables.length) {
+        console.error(
+            "[supabase-config] missing required environment variables:",
+            missingVariables.join(", ")
+        );
         throw new SupabaseConfigurationError("Supabase server configuration is missing.");
     }
 
@@ -13,9 +20,15 @@ function getSupabaseConfig() {
     try {
         parsed = new URL(rawUrl);
     } catch {
+        console.error("[supabase-config] invalid SUPABASE_URL formatting: URL could not be parsed.");
         throw new SupabaseConfigurationError("Supabase server configuration is invalid.");
     }
-    if (parsed.protocol !== "https:" || parsed.username || parsed.password) {
+    if (parsed.protocol !== "https:") {
+        console.error("[supabase-config] invalid SUPABASE_URL formatting: HTTPS is required.");
+        throw new SupabaseConfigurationError("Supabase server configuration is invalid.");
+    }
+    if (parsed.username || parsed.password) {
+        console.error("[supabase-config] invalid SUPABASE_URL formatting: credentials are not allowed.");
         throw new SupabaseConfigurationError("Supabase server configuration is invalid.");
     }
     return { baseUrl: parsed.origin, serviceKey: serviceKey };
