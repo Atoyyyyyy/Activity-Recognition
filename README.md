@@ -178,3 +178,9 @@ Additional JavaScript tests are in [`tests/`](tests/).
 - **External setup:** broker configuration, model artifacts, and cloud secrets are provisioned outside this repository. A clean clone requires these dependencies before it can process live data.
 
 Future work includes collecting labeled hardware trials, reporting per-class precision/recall and a confusion matrix, validating sensor placement and feature cadence, improving reconnect and observability behavior, and documenting repeatable deployment and model artifact provenance.
+
+## 📚 Project Documentation
+
+For a detailed walkthrough of the hardware setup, system architecture, implementation, testing, and results, visit our published Hackster.io project:
+
+**[View Our Complete Activity Recognition Project on Hackster.io](https://www.hackster.io/556815/real-time-activity-recognition-using-rt-spark-mqtt-and-mac-e5de24)**
