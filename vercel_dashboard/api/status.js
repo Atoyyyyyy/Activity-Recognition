@@ -10,7 +10,7 @@ module.exports = async function handler(req, res) {
     if (req.method !== "GET") return methodNotAllowed(res, "GET");
     try {
         const rows = await supabaseRequest(
-            "activity_predictions?select=id,activity,confidence,source,timestamp,sensor_timestamp&order=id.desc&limit=1",
+            "activity_predictions?select=id,activity,confidence,source,timestamp,sensor_timestamp&order=timestamp.desc,id.desc&limit=1",
             {}
         );
         const latest = Array.isArray(rows) && rows.length ? rows[0] : null;

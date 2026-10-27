@@ -79,6 +79,7 @@ test("new Supabase secret keys use apikey without a bearer JWT header", async ()
 
 test("status reports a fresh sensor timestamp as live", async () => {
     configureTestEnvironment();
+    let requestedUrl;
     const row = {
         id: 42,
         activity: "Walking",
@@ -87,12 +88,19 @@ test("status reports a fresh sensor timestamp as live", async () => {
         timestamp: new Date().toISOString(),
         sensor_timestamp: new Date(Date.now() - 1500).toISOString()
     };
-    mockRows([row]);
+    global.fetch = async url => {
+        requestedUrl = String(url);
+        return new Response(JSON.stringify([row]), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+        });
+    };
     const response = await invoke(statusHandler, "GET");
     assert.equal(response.statusCode, 200);
     assert.equal(response.body.stream_state, "live");
     assert.equal(response.body.latest_prediction.id, 42);
     assert.ok(response.body.sensor_age_seconds < 10);
+    assert.match(requestedUrl, /order=timestamp\.desc,id\.desc&limit=1$/);
 });
 
 test("status reports old sensor data as stale", async () => {
@@ -125,14 +133,22 @@ test("status treats a prediction without a sensor timestamp as stale", async () 
 
 test("activities returns latest API records", async () => {
     configureTestEnvironment();
+    let requestedUrl;
     const rows = [{
         id: 8, activity: "Running", confidence: 92, source: "random_forest",
         timestamp: new Date().toISOString()
     }];
-    mockRows(rows);
+    global.fetch = async url => {
+        requestedUrl = String(url);
+        return new Response(JSON.stringify(rows), {
+            status: 200,
+            headers: { "Content-Type": "application/json" }
+        });
+    };
     const response = await invoke(activitiesHandler, "GET");
     assert.equal(response.statusCode, 200);
     assert.deepEqual(response.body, rows);
+    assert.match(requestedUrl, /order=timestamp\.desc,id\.desc&limit=50$/);
 });
 
 test("activities returns an empty list when no records exist", async () => {
@@ -141,6 +157,16 @@ test("activities returns an empty list when no records exist", async () => {
     const response = await invoke(activitiesHandler, "GET");
     assert.equal(response.statusCode, 200);
     assert.deepEqual(response.body, []);
+});
+
+test("ingest GET probe matches deployed method contract", async () => {
+    let called = false;
+    global.fetch = async () => { called = true; throw new Error("GET must not access Supabase"); };
+    const response = await invoke(ingestHandler, "GET", {});
+    assert.equal(response.statusCode, 405);
+    assert.equal(response.headers.Allow, "POST");
+    assert.deepEqual(response.body, { error: "method_not_allowed" });
+    assert.equal(called, false);
 });
 
 test("ingest rejects an absent or incorrect token before database access", async () => {
@@ -182,9 +208,10 @@ test("ingest accepts an authenticated prediction idempotently", async () => {
     });
     assert.equal(response.statusCode, 202);
     assert.deepEqual(response.body, { accepted: true });
-    assert.match(requestOptions.url, /activity_predictions\?on_conflict=id$/);
+    assert.match(requestOptions.url, /activity_predictions\?on_conflict=local_prediction_id,timestamp$/);
     assert.match(requestOptions.options.headers.Prefer, /ignore-duplicates/);
-    assert.equal(JSON.parse(requestOptions.options.body).id, 50);
+    assert.equal(JSON.parse(requestOptions.options.body).local_prediction_id, 50);
+    assert.equal(Object.hasOwn(JSON.parse(requestOptions.options.body), "id"), false);
     assert.equal(requestOptions.options.headers.apikey, "sb_secret_test-only");
     assert.equal(Object.hasOwn(requestOptions.options.headers, "Authorization"), false);
     assert.equal(JSON.stringify(response.body).includes("sb_secret_test-only"), false);
@@ -207,6 +234,48 @@ test("ingest preserves null confidence for heuristic Idle", async () => {
     }, { authorization: "Bearer test-ingestion-token-only" });
     assert.equal(response.statusCode, 202);
     assert.equal(stored.confidence, null);
+});
+
+test("ingest accepts the observed live Idle payload shape without a sensor ID", async () => {
+    configureTestEnvironment();
+    let stored;
+    global.fetch = async (url, options) => {
+        assert.match(String(url), /activity_predictions\?on_conflict=local_prediction_id,timestamp$/);
+        stored = JSON.parse(options.body);
+        return new Response(null, { status: 204 });
+    };
+    const response = await invoke(ingestHandler, "POST", {
+        id: 3788,
+        activity: "Idle",
+        confidence: null,
+        source: "motion_heuristic",
+        timestamp: "2026-10-27T04:39:21.000Z",
+        sensor_timestamp: "2026-10-27T04:39:22.000Z"
+    }, { authorization: "Bearer test-ingestion-token-only" });
+    assert.equal(response.statusCode, 202);
+    assert.deepEqual(response.body, { accepted: true });
+    assert.equal(stored.local_prediction_id, 3788);
+    assert.equal(Object.hasOwn(stored, "id"), false);
+    assert.equal(stored.confidence, null);
+    assert.equal(Object.hasOwn(stored, "sensor_id"), false);
+});
+
+test("downstream Supabase HTTP 400 is translated to API HTTP 502", async () => {
+    configureTestEnvironment();
+    global.fetch = async () => new Response(
+        JSON.stringify({ code: "23514", message: "constraint failure" }),
+        { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+    const response = await invoke(ingestHandler, "POST", {
+        id: 54,
+        activity: "Walking",
+        confidence: 80,
+        source: "random_forest",
+        timestamp: new Date().toISOString(),
+        sensor_timestamp: new Date().toISOString()
+    }, { authorization: "Bearer test-ingestion-token-only" });
+    assert.equal(response.statusCode, 502);
+    assert.deepEqual(response.body, { error: "database_unavailable" });
 });
 
 test("ingest rejects heuristic probabilities and unknown labels", async () => {

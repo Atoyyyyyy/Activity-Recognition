@@ -44,7 +44,9 @@ function validatePrediction(body) {
     const sensorTimestamp = parseTimestamp(body.sensor_timestamp);
     if (!timestamp || !sensorTimestamp) return null;
     return {
-        id: body.id,
+        // Local SQLite IDs can restart or overlap records already in Supabase.
+        // Keep the source ID as an idempotency key; Supabase owns `id`.
+        local_prediction_id: body.id,
         activity: body.activity,
         confidence: body.confidence,
         source: body.source,
@@ -71,14 +73,16 @@ module.exports = async function handler(req, res) {
     if (!prediction) return sendJson(res, 400, { error: "invalid_prediction" });
 
     try {
-        await supabaseRequest("activity_predictions?on_conflict=id", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Prefer: "resolution=ignore-duplicates,return=minimal"
-            },
-            body: JSON.stringify(prediction)
-        });
+        await supabaseRequest(
+            "activity_predictions?on_conflict=local_prediction_id,timestamp", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Prefer: "resolution=ignore-duplicates,return=minimal"
+                },
+                body: JSON.stringify(prediction)
+            }
+        );
         return sendJson(res, 202, { accepted: true });
     } catch (error) {
         return handleDatabaseError(res, error);

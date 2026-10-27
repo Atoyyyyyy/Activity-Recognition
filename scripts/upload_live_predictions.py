@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Forward only fresh predictions created after this process starts."""
 
+import argparse
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -10,7 +12,7 @@ from datetime import datetime, timezone
 from getpass import getpass
 from pathlib import Path
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
 
@@ -19,7 +21,159 @@ POLL_SECONDS = 1.0
 MAX_BATCH = 100
 ALLOWED_ACTIVITIES = {"Idle", "Walking", "Running"}
 ALLOWED_SOURCES = {"motion_heuristic", "random_forest"}
+SAFE_ERROR_CODES = {
+    "invalid_prediction", "unauthorized", "database_unavailable",
+    "database_not_configured", "ingestion_not_configured", "method_not_allowed",
+    "BAD_REQUEST", "NOT_FOUND", "DEPLOYMENT_NOT_FOUND",
+    "FUNCTION_INVOCATION_FAILED", "FUNCTION_INVOCATION_TIMEOUT",
+    "INTERNAL_SERVER_ERROR"
+}
+SAFE_FIELD_NAMES = {
+    "id", "activity", "confidence", "source", "timestamp", "sensor_timestamp"
+}
+SAFE_RESPONSE_HEADERS = ("x-vercel-id", "x-vercel-error", "x-vercel-cache", "server")
+SAFE_HEADER_VALUE = re.compile(r"^[A-Za-z0-9_.:/ -]{1,160}$")
+MAX_ERROR_BODY_BYTES = 65536
 DEFAULT_DB = Path(__file__).resolve().parents[1] / "backend" / "activities.db"
+
+
+class IngestRejectedError(RuntimeError):
+    """A deterministic client error that should not be retried."""
+
+
+def _safe_error_code(payload):
+    if not isinstance(payload, dict):
+        return "unavailable"
+    candidate = payload.get("error", payload.get("code"))
+    if isinstance(candidate, dict):
+        candidate = candidate.get("code")
+    return candidate if isinstance(candidate, str) and candidate in SAFE_ERROR_CODES else "unavailable"
+
+
+def _safe_error_fields(payload):
+    if not isinstance(payload, dict):
+        return []
+    candidate_fields = payload.get("invalid_fields", payload.get("fields", []))
+    if isinstance(candidate_fields, dict):
+        candidate_fields = list(candidate_fields)
+    if not isinstance(candidate_fields, list):
+        return []
+    return sorted({
+        field for field in candidate_fields
+        if isinstance(field, str) and field in SAFE_FIELD_NAMES
+    })
+
+
+def _safe_url(value):
+    try:
+        parsed = urlsplit(value)
+        host = parsed.hostname
+        if not host:
+            return "unavailable"
+        if ":" in host:
+            host = "[" + host + "]"
+        if parsed.port:
+            host += ":" + str(parsed.port)
+        # Do not print URL user info, query values, or fragments.
+        path = parsed.path if parsed.path.endswith("/api/ingest") else "/<redacted-path>"
+        return urlunsplit((parsed.scheme, host, path, "", ""))
+    except (TypeError, ValueError):
+        return "unavailable"
+
+
+def _body_type(body, content_type):
+    if not body:
+        return "empty"
+    media_type = (content_type or "").split(";", 1)[0].strip().lower()
+    sample = body.lstrip()[:64].lower()
+    if "json" in media_type or sample.startswith((b"{", b"[")):
+        try:
+            json.loads(body.decode("utf-8"))
+            return "json"
+        except (UnicodeError, json.JSONDecodeError):
+            return "invalid_json"
+    if "html" in media_type or sample.startswith((b"<!doctype html", b"<html")):
+        return "html"
+    if media_type.startswith("text/") or not media_type:
+        return "plain_text"
+    return "other"
+
+
+def summarize_http_error(error, request_url, request_method="POST"):
+    """Describe an HTTP error without logging body text or private headers."""
+    response_headers = error.headers or getattr(error, "hdrs", None)
+    content_type = response_headers.get("Content-Type") if response_headers else None
+    content_type = content_type.split(";", 1)[0].strip().lower() if content_type else "unknown"
+    content_length_header = response_headers.get("Content-Length") if response_headers else None
+    try:
+        declared_length = int(content_length_header) if content_length_header is not None else None
+    except (TypeError, ValueError):
+        declared_length = None
+    body = b""
+    try:
+        body = error.read(MAX_ERROR_BODY_BYTES + 1)
+    except (AttributeError, OSError):
+        pass
+    truncated = len(body) > MAX_ERROR_BODY_BYTES
+    body = body[:MAX_ERROR_BODY_BYTES]
+    parsed_body = None
+    if _body_type(body, content_type) == "json":
+        try:
+            parsed_body = json.loads(body.decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            pass
+
+    body_type = _body_type(body, content_type)
+    code = _safe_error_code(parsed_body)
+    fields = _safe_error_fields(parsed_body)
+    response_url = error.geturl() if hasattr(error, "geturl") else request_url
+    if declared_length is not None and declared_length >= 0:
+        length = "response_length=" + str(declared_length)
+    elif truncated:
+        length = "response_length_at_least=" + str(len(body))
+    else:
+        length = "response_length=" + str(len(body))
+    parts = [
+        "HTTP diagnostic:",
+        "method=" + request_method,
+        "url=" + _safe_url(response_url),
+        "status=" + str(error.code),
+        "content_type=" + (content_type or "unknown"),
+        length,
+        "body_type=" + body_type,
+        "api_error_code=" + code,
+    ]
+    for header in SAFE_RESPONSE_HEADERS:
+        value = response_headers.get(header) if response_headers else None
+        if value:
+            value = value.strip()
+            safe_value = value if SAFE_HEADER_VALUE.fullmatch(value) else "present_redacted"
+            parts.append(header.replace("-", "_") + "=" + safe_value)
+    if fields:
+        parts.append("fields=" + ",".join(fields))
+    if body_type == "html":
+        parts.append("summary=HTML error response; body omitted")
+    elif body_type == "plain_text":
+        parts.append("summary=plain-text error response; body omitted")
+    elif body_type == "empty":
+        parts.append("summary=empty response body")
+    elif body_type == "invalid_json":
+        parts.append("summary=invalid JSON response; body omitted")
+    elif code == "unavailable":
+        parts.append("summary=JSON body had no recognized safe API error code")
+    return "; ".join(parts)
+
+
+def build_prediction(row, sensor_timestamp):
+    source = row["source"]
+    return {
+        "id": int(row["id"]),
+        "activity": row["activity"],
+        "confidence": None if source == "motion_heuristic" else row["confidence"],
+        "source": source,
+        "timestamp": iso_utc(row["timestamp"]),
+        "sensor_timestamp": iso_utc(sensor_timestamp),
+    }
 
 
 def parse_utc(value):
@@ -105,11 +259,33 @@ def validate_configuration(api_url, token):
         raise ValueError("ACTIVITY_API_URL must not contain a query or fragment.")
     if not token:
         raise ValueError("The ingestion token is required.")
+    # RFC 6750 bearer tokens use this visible ASCII alphabet. Checking before
+    # constructing the header prevents pasted whitespace/control characters
+    # from producing a malformed request. Never include the token in errors.
+    if token.lower().startswith("bearer "):
+        raise ValueError("Enter the ingestion token only; do not include the 'Bearer ' prefix.")
+    if not re.fullmatch(r"[A-Za-z0-9._~+/-]+={0,}", token):
+        raise ValueError("The ingestion token contains characters invalid in a Bearer token.")
 
 
-def run():
+def safe_token_diagnostic(token):
+    """Return token shape metadata only; never include token contents."""
+    allowed = re.fullmatch(r"[A-Za-z0-9._~+/-]+={0,}", token) is not None
+    unexpected = sum(
+        character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._~+/-="
+        for character in token
+    )
+    return (
+        f"token_length={len(token)}; bearer_prefix={'yes' if token.lower().startswith('bearer ') else 'no'}; "
+        f"allowed_bearer_format={'yes' if allowed else 'no'}; unexpected_characters={unexpected}; "
+        f"edge_whitespace={'yes' if token != token.strip() else 'no'}"
+    )
+
+
+def run(once=False):
     api_url = os.environ.get("ACTIVITY_API_URL", "").strip().rstrip("/")
     token = os.environ.get("ACTIVITY_INGEST_TOKEN") or getpass("Vercel ingestion token: ")
+    print("Safe token check: " + safe_token_diagnostic(token))
     db_path = Path(os.environ.get("ACTIVITY_DB_PATH", DEFAULT_DB)).expanduser()
     validate_configuration(api_url, token)
 
@@ -147,24 +323,27 @@ def run():
                     prediction_cursor = prediction_id
                     continue
 
-                prediction = {
-                    "id": prediction_id,
-                    "activity": row["activity"],
-                    "confidence": None if source == "motion_heuristic" else row["confidence"],
-                    "source": source,
-                    "timestamp": iso_utc(row["timestamp"]),
-                    "sensor_timestamp": iso_utc(sensor_timestamp),
-                }
+                prediction = build_prediction(row, sensor_timestamp)
                 try:
                     post_prediction(api_url, token, prediction)
                 except HTTPError as error:
-                    print("Prediction upload failed with HTTP " + str(error.code) + ". Retrying.")
+                    summary = summarize_http_error(
+                        error, api_url.rstrip("/") + "/api/ingest", "POST"
+                    )
+                    if 400 <= error.code < 500:
+                        raise IngestRejectedError(
+                            "Prediction rejected; stopping to avoid retrying a deterministic client error: "
+                            + summary
+                        ) from None
+                    print("Prediction upload failed; retrying later: " + summary)
                     break
                 except (URLError, TimeoutError, OSError, RuntimeError):
                     print("Prediction upload failed. Retrying when the API is reachable.")
                     break
                 prediction_cursor = prediction_id
                 print("Forwarded new prediction ID " + str(prediction_id) + ".")
+                if once:
+                    return
 
             time.sleep(POLL_SECONDS)
     finally:
@@ -172,10 +351,20 @@ def run():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="upload only the next eligible fresh prediction, then exit",
+    )
+    arguments = parser.parse_args()
     try:
-        run()
+        run(once=arguments.once)
     except KeyboardInterrupt:
         print("Uploader stopped.")
+    except IngestRejectedError as error:
+        print("Uploader stopped: " + str(error), file=sys.stderr)
+        raise SystemExit(1)
     except (FileNotFoundError, ValueError, RuntimeError, sqlite3.Error) as error:
         print("Uploader could not start: " + str(error), file=sys.stderr)
         raise SystemExit(1)

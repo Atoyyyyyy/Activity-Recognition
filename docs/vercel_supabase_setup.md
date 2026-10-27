@@ -4,7 +4,9 @@ The dashboard and its three API functions are in `vercel_dashboard/`. Configure 
 
 ## 1. Create the Supabase table
 
-Create or select a Supabase project, open **SQL Editor**, and run [`supabase_activity_predictions.sql`](supabase_activity_predictions.sql). The `activity_predictions` table stores one row per local SQLite prediction ID. Row-level security is enabled; public and authenticated clients have no table access. Vercel functions use the service-role key server-side.
+Create or select a Supabase project, open **SQL Editor**, and run [`supabase_activity_predictions.sql`](supabase_activity_predictions.sql). The `activity_predictions` table stores activity predictions with cloud-generated row IDs. Row-level security is enabled; public and authenticated clients have no table access. Vercel functions use the service-role key server-side.
+
+For an existing table, run [`supabase_activity_predictions_migration.sql`](supabase_activity_predictions_migration.sql) before deploying the current API. It preserves existing rows, adds cloud-generated row IDs and a separate local prediction ID for retry deduplication, and supports ordering by prediction time.
 
 ## 2. Set Vercel environment variables
 
@@ -18,11 +20,11 @@ Redeploy after setting the variables. The dashboard calls same-origin `/api/stat
 
 ## 3. API routes
 
-- `GET /api/status` — latest sensor timestamp, prediction, age, and `live`, `stale`, or `waiting` state. Freshness uses the same 10-second threshold as the local Flask API.
-- `GET /api/activities` — latest 50 prediction rows, newest first.
-- `POST /api/ingest` — accepts one prediction only with `Authorization: Bearer <INGEST_TOKEN>`. Repeated IDs are idempotently ignored. `motion_heuristic` predictions must have `confidence: null`.
+- `GET /api/status` — latest prediction by timestamp, its attached sensor timestamp, age, and `live`, `stale`, or `waiting` state. Freshness uses the same 10-second threshold as the local Flask API.
+- `GET /api/activities` — latest 50 prediction rows, newest first by timestamp.
+- `POST /api/ingest` — accepts one prediction only with `Authorization: Bearer <INGEST_TOKEN>`. The cloud assigns its own row ID; repeated local prediction IDs with the same timestamp are idempotently ignored. `motion_heuristic` predictions must have `confidence: null`.
 
-The service-role key never goes to the browser. The ingestion token is required only by the Python uploader and is not part of dashboard requests.
+The service-role key never goes to the browser. The ingestion token is required only by the Python uploader and is not part of dashboard requests. Sensor readings are not uploaded to Supabase; each prediction carries the timestamp of the latest local sensor reading used for that inference.
 
 ## 4. Run the live uploader
 
